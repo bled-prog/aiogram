@@ -54,6 +54,7 @@ class CustomSession(BaseSession):
         yield b"\f" * 10
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestBaseSession:
     def test_init_api(self):
         session = CustomSession()
