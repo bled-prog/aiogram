@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import json
+import warnings
 from http import HTTPStatus
 from types import TracebackType
 from typing import (
@@ -51,10 +52,7 @@ class BaseSession(abc.ABC):
     """
     This is base class for all HTTP sessions in aiogram.
 
-    The parameters `json_loads`, `json_dumps`, and `timeout` are deprecated
-    and will be removed in version 3.14.0. These parameters are no longer used,
-    and the corresponding functionalities have been replaced by pydantic's
-    built-in serialization/deserialization methods.
+    If you want to create your own session, you must inherit from this class.
     """
 
     def __init__(
@@ -62,31 +60,32 @@ class BaseSession(abc.ABC):
         api: TelegramAPIServer = PRODUCTION,
         json_loads: Optional[_JsonLoads] = None,
         json_dumps: Optional[_JsonDumps] = None,
-        timeout: Optional[float] = None,
+        timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         """
+
         :param api: Telegram Bot API URL patterns
         :param json_loads: JSON loader (deprecated, not used)
         :param json_dumps: JSON dumper (deprecated, not used)
-        :param timeout: Session scope request timeout (deprecated, not used)
+        :param timeout: Session scope request timeout
         """
-        if json_loads is not None or json_dumps is not None or timeout is not None:
+        if json_loads or json_dumps:
             warnings.warn(
-                "Parameters `json_loads`, `json_dumps`, and `timeout` are deprecated "
-                "and will be removed in aiogram 3.14.0. These parameters are no longer use.",
+                "Parameters `json_loads` and `json_dumps` are deprecated "
+                "and will be removed in aiogram 3.14.0. These parameters are no longer used.",
                 DeprecationWarning,
                 stacklevel=2,
             )
 
         self.api = api
+        self.json_loads = json_loads or json.loads
+        self.json_dumps = json_dumps or json.dumps
+        self.timeout = timeout
+
         self.middleware = RequestMiddlewareManager()
 
     def check_response(
-        self,
-        bot: Bot,
-        method: TelegramMethod[TelegramType],
-        status_code: int,
-        content: str,
+        self, bot: Bot, method: TelegramMethod[TelegramType], status_code: int, content: str
     ) -> Response[TelegramType]:
         """
         Check response status
@@ -105,9 +104,7 @@ class BaseSession(abc.ABC):
         if parameters := response.parameters:
             if parameters.retry_after:
                 raise TelegramRetryAfter(
-                    method=method,
-                    message=description,
-                    retry_after=parameters.retry_after,
+                    method=method, message=description, retry_after=parameters.retry_after
                 )
             if parameters.migrate_to_chat_id:
                 raise TelegramMigrateToChat(
@@ -182,9 +179,7 @@ class BaseSession(abc.ABC):
         method: TelegramMethod[TelegramType],
         timeout: Optional[int] = None,
     ) -> TelegramType:
-        middleware = self.middleware.wrap_middlewares(
-            self.make_request, timeout=timeout
-        )
+        middleware = self.middleware.wrap_middlewares(self.make_request, timeout=timeout)
         return cast(TelegramType, await middleware(bot, method))
 
     async def __aenter__(self) -> BaseSession:
